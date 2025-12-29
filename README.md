@@ -4,7 +4,7 @@ A Docker-based bot that posts interesting bird facts to Bluesky once daily.
 
 ## Features
 
-- Posts a unique bird fact every day at 9 AM
+- Posts a unique bird fact every day at 6 AM
 - Tracks posted facts to avoid repetition
 - Automatically resets when all facts have been shared
 - Runs in Docker for easy deployment
@@ -60,7 +60,7 @@ docker-compose build
 # Test the bot (posts immediately)
 docker-compose run --rm bird-facts-bot
 
-# Start the scheduler (runs daily at 9 AM)
+# Start the scheduler (runs daily at 6 AM)
 docker-compose up -d scheduler
 ```
 
@@ -88,7 +88,7 @@ docker-compose down
 ### Change Posting Time
 Edit `docker-compose.yml` and modify the schedule line:
 ```yaml
-ofelia.job-run.bird-facts.schedule: "0 0 9 * * *"
+ofelia.job-run.bird-facts.schedule: "0 0 6 * * *"
 ```
 
 Format: `seconds minutes hours day month weekday`
