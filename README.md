@@ -152,8 +152,15 @@ bird-facts-bot/
 
 ### Bot doesn't post
 1. Check credentials in `.env` file
-2. Verify your App Password is correct
-3. Check logs: `docker-compose logs bird-facts-bot`
+2. Verify your App Password (and optionally Flickr API key) is correct
+3. Test manually: `docker-compose run --rm bird-facts-bot`
+4. Check scheduler logs: `docker-compose logs scheduler`
+5. Verify scheduler is running: `docker-compose ps`
+
+### No images in posts
+1. Make sure you've added `FLICKR_API_KEY` to your `.env` file
+2. Check the bot can find the bird name in the fact
+3. Test manually to see image search results in the logs
 
 ### Want to reset fact rotation
 Delete `data/posted_facts.json` to start over:
