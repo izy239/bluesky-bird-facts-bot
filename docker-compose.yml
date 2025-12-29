@@ -1,0 +1,24 @@
+services:
+  bird-facts-bot:
+    build: .
+    image: bird-facts-bot:latest
+    environment:
+      - BLUESKY_USERNAME=${BLUESKY_USERNAME}
+      - BLUESKY_PASSWORD=${BLUESKY_PASSWORD}
+    volumes:
+      - ./data:/app/data
+    restart: "no"
+
+  # Scheduler to run the bot daily at 9 AM
+  scheduler:
+    image: mcuadros/ofelia:latest
+    depends_on:
+      - bird-facts-bot
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      ofelia.job-run.bird-facts.schedule: "0 0 6 * * *"
+      ofelia.job-run.bird-facts.container: "bird-facts-bot"
+    environment:
+      - TZ=America/New_York
