@@ -15,7 +15,7 @@ def load_bird_facts():
 def load_posted_facts():
     """Load previously posted facts to avoid repetition"""
     try:
-        with open('posted_facts.json', 'r') as f:
+        with open('data/posted_facts.json', 'r') as f:
             return json.load(f)
     except FileNotFoundError:
         return []
@@ -24,7 +24,7 @@ def save_posted_fact(fact_index):
     """Save the index of posted fact"""
     posted = load_posted_facts()
     posted.append(fact_index)
-    with open('posted_facts.json', 'w') as f:
+    with open('data/posted_facts.json', 'w') as f:
         json.dump(posted, f)
 
 def get_next_fact(facts):
@@ -35,7 +35,7 @@ def get_next_fact(facts):
     # Reset if all facts have been posted
     if not available_indices:
         print("All facts posted! Resetting...")
-        with open('posted_facts.json', 'w') as f:
+        with open('data/posted_facts.json', 'w') as f:
             json.dump([], f)
         available_indices = list(range(len(facts)))
     
@@ -61,6 +61,39 @@ def extract_bird_name(fact):
     
     return None
 
+def singularize_bird_name(bird_name):
+    """Convert plural bird names to singular for better search results"""
+    if not bird_name:
+        return bird_name
+    
+    # Common plural patterns for birds
+    singular = bird_name
+    
+    # Simple rules for common bird name plurals
+    if bird_name.endswith('ies'):
+        # Canaries -> Canary
+        singular = bird_name[:-3] + 'y'
+    elif bird_name.endswith('oes'):
+        # Flamingoes -> Flamingo (though both are correct)
+        singular = bird_name[:-2]
+    elif bird_name.endswith('ses'):
+        # Thrushes -> Thrush
+        singular = bird_name[:-2]
+    elif bird_name.endswith('ches'):
+        # Finches -> Finch
+        singular = bird_name[:-2]
+    elif bird_name.endswith('xes'):
+        # Ibexes -> Ibex (not common for birds but safe)
+        singular = bird_name[:-2]
+    elif bird_name.endswith('s') and not bird_name.endswith('ss'):
+        # Most plurals: Grebes -> Grebe, Terns -> Tern
+        # But not: Albatross -> Albatros (wrong)
+        # Check if it's likely a plural by looking at common bird endings
+        if bird_name.endswith(('rds', 'ks', 'ls', 'ns', 'ts', 'es', 'ws', 'ys')):
+            singular = bird_name[:-1]
+    
+    return singular
+
 def search_flickr_image(bird_name):
     """Search Flickr for a Creative Commons licensed bird image"""
     api_key = os.getenv('FLICKR_API_KEY')
@@ -69,13 +102,17 @@ def search_flickr_image(bird_name):
         print("No Flickr API key found, skipping image")
         return None
     
+    # Convert to singular for better search results
+    search_name = singularize_bird_name(bird_name)
+    print(f"Searching for: {search_name} (original: {bird_name})")
+    
     try:
         # Search for Creative Commons licensed images
         url = "https://api.flickr.com/services/rest/"
         params = {
             'method': 'flickr.photos.search',
             'api_key': api_key,
-            'text': f'{bird_name} bird',
+            'text': f'{search_name} bird',
             'license': '1,2,4,5,7,9,10',  # CC licenses (excluding NC and ND for safety)
             'content_type': '1',  # Photos only
             'media': 'photos',
@@ -90,7 +127,7 @@ def search_flickr_image(bird_name):
         data = response.json()
         
         if data.get('stat') != 'ok' or not data.get('photos', {}).get('photo'):
-            print(f"No Flickr images found for {bird_name}")
+            print(f"No Flickr images found for {search_name}")
             return None
         
         # Get the first photo with a URL
