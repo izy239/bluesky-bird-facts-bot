@@ -5,6 +5,7 @@ services:
     environment:
       - BLUESKY_USERNAME=${BLUESKY_USERNAME}
       - BLUESKY_PASSWORD=${BLUESKY_PASSWORD}
+      - FLICKR_API_KEY=${FLICKR_API_KEY}
     volumes:
       - ./data:/app/data
     restart: "no"

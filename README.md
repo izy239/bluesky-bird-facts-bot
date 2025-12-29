@@ -4,17 +4,22 @@ A Docker-based bot that posts interesting bird facts to Bluesky once daily.
 
 ## Features
 
-- Posts a unique bird fact every day at 6 AM
+- Posts a unique bird fact every day at 6 AM ET
+- Includes Creative Commons licensed bird photos from Flickr
+- Credits photographers in each post
+- Adds descriptive alt text for accessibility
+- Clickable hashtags (#birdfacts #Birds #Nature)
 - Tracks posted facts to avoid repetition
 - Automatically resets when all facts have been shared
 - Runs in Docker for easy deployment
-- Includes 50 fascinating bird facts
+- Includes 365 fascinating bird facts
 
 ## Prerequisites
 
 - Docker and Docker Compose installed
 - A Bluesky account
 - A Bluesky App Password (see instructions below)
+- (Optional) A Flickr API key for including images in posts
 
 ## Setup Instructions
 
@@ -25,7 +30,21 @@ A Docker-based bot that posts interesting bird facts to Bluesky once daily.
 3. Create a new App Password
 4. Save this password securely (you'll need it in step 3)
 
-### 2. Clone and Configure
+### 2. Get Your Flickr API Key (Optional but Recommended)
+
+Images make posts much more engaging! To add bird photos to your posts:
+
+1. Go to https://www.flickr.com/services/apps/create/apply/
+2. Sign in with a Flickr/Yahoo account (or create one)
+3. Apply for a non-commercial API key
+4. Fill out the form:
+   - App name: "Bird Facts Bot" (or similar)
+   - Purpose: "Educational bot posting bird facts with photos"
+5. Copy your API Key (not the Secret)
+
+**Note:** Without a Flickr API key, the bot will still work but posts won't include images.
+
+### 3. Clone and Configure
 
 ```bash
 # Create a directory for the bot
@@ -42,16 +61,19 @@ cp .env.example .env
 mkdir data
 ```
 
-### 3. Add Your Credentials
+### 4. Add Your Credentials
 
-Edit the `.env` file and add your Bluesky credentials:
+Edit the `.env` file and add your credentials:
 
 ```
 BLUESKY_USERNAME=yourhandle.bsky.social
 BLUESKY_PASSWORD=your-app-password-here
+FLICKR_API_KEY=your-flickr-api-key-here
 ```
 
-### 4. Build and Run
+**Note:** The `FLICKR_API_KEY` is optional. If you don't include it, posts will still work but won't have images.
+
+### 5. Build and Run
 
 ```bash
 # Build the Docker image
@@ -60,7 +82,7 @@ docker-compose build
 # Test the bot (posts immediately)
 docker-compose run --rm bird-facts-bot
 
-# Start the scheduler (runs daily at 6 AM)
+# Start the scheduler (runs daily at 9 AM)
 docker-compose up -d scheduler
 ```
 
@@ -88,7 +110,7 @@ docker-compose down
 ### Change Posting Time
 Edit `docker-compose.yml` and modify the schedule line:
 ```yaml
-ofelia.job-run.bird-facts.schedule: "0 0 6 * * *"
+ofelia.job-run.bird-facts.schedule: "0 0 9 * * *"
 ```
 
 Format: `seconds minutes hours day month weekday`

@@ -1,6 +1,8 @@
 import os
 import json
 import random
+import re
+import requests
 from datetime import datetime
 from atproto import Client, models
 
@@ -40,17 +42,128 @@ def get_next_fact(facts):
     fact_index = random.choice(available_indices)
     return fact_index, facts[fact_index]
 
-def create_facets(text):
-    """Create facets for hashtags to make them clickable"""
-    facets = []
-    hashtags = ['#birdfacts', '#Birds', '#Nature']
+def extract_bird_name(fact):
+    """Extract the bird name from the fact text"""
+    # Common patterns for bird names at the start of sentences
+    patterns = [
+        r'^The ([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)?)',  # "The Arctic Tern has..."
+        r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)?)\s+(?:are|can|have|weigh|get|stand|live|hold|perform)',  # "Hummingbirds are..."
+        r"^A\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:'s)?)",  # "A peacock's tail..."
+    ]
     
-    for hashtag in hashtags:
-        start = text.find(hashtag)
+    for pattern in patterns:
+        match = re.match(pattern, fact)
+        if match:
+            bird_name = match.group(1)
+            # Remove possessive 's
+            bird_name = bird_name.replace("'s", "")
+            return bird_name
+    
+    return None
+
+def search_flickr_image(bird_name):
+    """Search Flickr for a Creative Commons licensed bird image"""
+    api_key = os.getenv('FLICKR_API_KEY')
+    
+    if not api_key:
+        print("No Flickr API key found, skipping image")
+        return None
+    
+    try:
+        # Search for Creative Commons licensed images
+        url = "https://api.flickr.com/services/rest/"
+        params = {
+            'method': 'flickr.photos.search',
+            'api_key': api_key,
+            'text': f'{bird_name} bird',
+            'license': '1,2,4,5,7,9,10',  # CC licenses (excluding NC and ND for safety)
+            'content_type': '1',  # Photos only
+            'media': 'photos',
+            'sort': 'relevance',
+            'per_page': '10',
+            'format': 'json',
+            'nojsoncallback': '1',
+            'extras': 'owner_name,license,url_c,url_z'  # Get medium size images
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+        
+        if data.get('stat') != 'ok' or not data.get('photos', {}).get('photo'):
+            print(f"No Flickr images found for {bird_name}")
+            return None
+        
+        # Get the first photo with a URL
+        for photo in data['photos']['photo']:
+            image_url = photo.get('url_c') or photo.get('url_z')  # Try medium, then large
+            if image_url:
+                owner_name = photo.get('ownername', 'Unknown')
+                photo_id = photo['id']
+                photo_url = f"https://www.flickr.com/photos/{photo['owner']}/{photo_id}"
+                
+                return {
+                    'url': image_url,
+                    'photographer': owner_name,
+                    'photo_url': photo_url,
+                    'bird_name': bird_name
+                }
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error searching Flickr: {e}")
+        return None
+
+def download_image(image_url):
+    """Download image from URL"""
+    try:
+        response = requests.get(image_url, timeout=15)
+        response.raise_for_status()
+        return response.content
+    except Exception as e:
+        print(f"Error downloading image: {e}")
+        return None
+
+def create_facets(text, photo_url=None):
+    """Create facets for hashtags and photo credit link to make them clickable"""
+    facets = []
+    
+    # Find all hashtags in the text dynamically
+    import re
+    hashtag_pattern = r'#\w+'
+    for match in re.finditer(hashtag_pattern, text):
+        hashtag = match.group()
+        start = match.start()
+        
+        # Convert string position to byte position
+        byte_start = len(text[:start].encode('utf-8'))
+        byte_end = len(text[:start + len(hashtag)].encode('utf-8'))
+        
+        facets.append(
+            models.AppBskyRichtextFacet.Main(
+                index=models.AppBskyRichtextFacet.ByteSlice(
+                    byte_start=byte_start,
+                    byte_end=byte_end
+                ),
+                features=[models.AppBskyRichtextFacet.Tag(tag=hashtag[1:])]
+            )
+        )
+    
+    # Add photo credit link facet if provided
+    if photo_url:
+        # Find the photographer credit text (e.g., "Photo by John Doe")
+        photo_credit_pattern = "📷 Photo by "
+        start = text.find(photo_credit_pattern)
         if start != -1:
-            # Convert string position to byte position
+            # Find the end of the photographer's name (before the newline)
+            name_start = start + len(photo_credit_pattern)
+            name_end = text.find('\n', name_start)
+            if name_end == -1:
+                name_end = len(text)
+            
+            # Create link for the entire "Photo by [Name]" text
             byte_start = len(text[:start].encode('utf-8'))
-            byte_end = len(text[:start + len(hashtag)].encode('utf-8'))
+            byte_end = len(text[:name_end].encode('utf-8'))
             
             facets.append(
                 models.AppBskyRichtextFacet.Main(
@@ -58,14 +171,14 @@ def create_facets(text):
                         byte_start=byte_start,
                         byte_end=byte_end
                     ),
-                    features=[models.AppBskyRichtextFacet.Tag(tag=hashtag[1:])]
+                    features=[models.AppBskyRichtextFacet.Link(uri=photo_url)]
                 )
             )
     
     return facets
 
-def post_to_bluesky(text):
-    """Post the bird fact to Bluesky with clickable hashtags"""
+def post_to_bluesky(text, image_data=None, alt_text=None, photo_url=None):
+    """Post the bird fact to Bluesky with optional image"""
     username = os.getenv('BLUESKY_USERNAME')
     password = os.getenv('BLUESKY_PASSWORD')
     
@@ -75,11 +188,32 @@ def post_to_bluesky(text):
     client = Client()
     client.login(username, password)
     
-    # Create facets for clickable hashtags
-    facets = create_facets(text)
+    # Create facets for clickable hashtags and photo credit link
+    facets = create_facets(text, photo_url)
     
-    # Send post with facets
-    post = client.send_post(text=text, facets=facets)
+    # Upload image if provided
+    embed = None
+    if image_data:
+        try:
+            print("Uploading image to Bluesky...")
+            upload = client.upload_blob(image_data)
+            
+            # Create image embed with alt text
+            embed = models.AppBskyEmbedImages.Main(
+                images=[
+                    models.AppBskyEmbedImages.Image(
+                        image=upload.blob,
+                        alt=alt_text or "Bird photograph"
+                    )
+                ]
+            )
+            print("Image uploaded successfully")
+        except Exception as e:
+            print(f"Error uploading image: {e}")
+            embed = None
+    
+    # Send post with facets and optional image
+    post = client.send_post(text=text, facets=facets, embed=embed)
     print(f"Posted successfully at {datetime.now()}")
     return post
 
@@ -92,11 +226,41 @@ def main():
         print("Selecting a bird fact...")
         fact_index, fact = get_next_fact(facts)
         
-        # Format the post
-        post_text = f"🐦 Bird Fact of the Day 🐦\n\n{fact}\n\n#birdfacts #Birds #Nature"
+        # Try to extract bird name and find image
+        bird_name = extract_bird_name(fact)
+        print(f"Extracted bird name: {bird_name}")
+        
+        image_info = None
+        image_data = None
+        photo_url = None
+        post_text = f"🐦 Bird Fact of the Day 🐦\n\n{fact}\n\n"
+        
+        if bird_name:
+            print(f"Searching Flickr for {bird_name}...")
+            image_info = search_flickr_image(bird_name)
+            
+            if image_info:
+                print(f"Found image by {image_info['photographer']}")
+                image_data = download_image(image_info['url'])
+                photo_url = image_info['photo_url']
+                
+                if image_data:
+                    # Add photo credit to the post
+                    post_text += f"📷 Photo by {image_info['photographer']}\n\n"
+        
+        # Add hashtags - include bird name hashtag if available
+        if bird_name:
+            # Convert bird name to hashtag format (remove spaces, keep camelCase)
+            bird_hashtag = bird_name.replace(' ', '').replace('-', '')
+            post_text += f"#{bird_hashtag} #birdfacts #Birds #Nature"
+        else:
+            post_text += "#birdfacts #Birds #Nature"
+        
+        # Create alt text
+        alt_text = f"Photograph of a {bird_name}" if bird_name else "Bird photograph"
         
         print(f"Posting: {post_text[:50]}...")
-        post_to_bluesky(post_text)
+        post_to_bluesky(post_text, image_data, alt_text, photo_url)
         
         # Save that we posted this fact
         save_posted_fact(fact_index)
