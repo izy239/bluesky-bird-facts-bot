@@ -45,10 +45,11 @@ def get_next_fact(facts):
 def extract_bird_name(fact):
     """Extract the bird name from the fact text"""
     # Common patterns for bird names at the start of sentences
+    # Now includes hyphens for names like "Long-tailed Tit"
     patterns = [
-        r'^The ([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)?)',  # "The Arctic Tern has..."
-        r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+[A-Z][a-z]+)?)\s+(?:are|can|have|weigh|get|stand|live|hold|perform)',  # "Hummingbirds are..."
-        r"^A\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:'s)?)",  # "A peacock's tail..."
+        r'^The ([A-Z][a-z]+(?:[-\s]+[A-Z][a-z]+)*(?:[-\s]+[A-Z][a-z]+)?)',  # "The Arctic Tern has..." or "The Long-tailed Tit..."
+        r'^([A-Z][a-z]+(?:[-\s]+[A-Z][a-z]+)*(?:[-\s]+[A-Z][a-z]+)?)\s+(?:are|can|have|weigh|get|stand|live|hold|perform)',  # "Hummingbirds are..."
+        r"^A\s+([A-Z][a-z]+(?:[-\s]+[A-Z][a-z]+)*(?:'s)?)",  # "A peacock's tail..."
     ]
     
     for pattern in patterns:
@@ -287,14 +288,16 @@ def main():
         
         # Add hashtags - include bird name hashtag if available
         if bird_name:
-            # Convert bird name to hashtag format (remove spaces, keep camelCase)
-            bird_hashtag = bird_name.replace(' ', '').replace('-', '')
+            # Convert bird name to singular, then to hashtag format (remove spaces, keep camelCase)
+            singular_bird_name = singularize_bird_name(bird_name)
+            bird_hashtag = singular_bird_name.replace(' ', '').replace('-', '')
             post_text += f"#{bird_hashtag} #birdfacts #Birds #Nature"
         else:
             post_text += "#birdfacts #Birds #Nature"
         
-        # Create alt text
-        alt_text = f"Photograph of a {bird_name}" if bird_name else "Bird photograph"
+        # Create alt text (use singular form)
+        alt_text_name = singularize_bird_name(bird_name) if bird_name else "bird"
+        alt_text = f"Photograph of a {alt_text_name}"
         
         print(f"Posting: {post_text[:50]}...")
         post_to_bluesky(post_text, image_data, alt_text, photo_url)
