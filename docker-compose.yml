@@ -1,21 +1,6 @@
 version: '3.8'
 
 services:
-  # Scheduler to run the bot daily at 6 AM ET
-  scheduler:
-    image: mcuadros/ofelia:latest
-    command: daemon --docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ${PWD}:/workdir
-    working_dir: /workdir
-    environment:
-      - TZ=America/New_York
-    labels:
-      ofelia.job-local.bird-facts.schedule: "0 0 6 * * *"
-      ofelia.job-local.bird-facts.command: "docker-compose run --rm bird-facts-bot"
-    restart: unless-stopped
-
   bird-facts-bot:
     build: .
     image: bird-facts-bot:latest
@@ -27,3 +12,20 @@ services:
       - ./data:/app/data
     profiles:
       - manual
+
+  # Scheduler to run the bot daily at 6 AM ET
+  scheduler:
+    image: mcuadros/ofelia:latest
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ=America/New_York
+      - BLUESKY_USERNAME=${BLUESKY_USERNAME}
+      - BLUESKY_PASSWORD=${BLUESKY_PASSWORD}
+      - FLICKR_API_KEY=${FLICKR_API_KEY}
+      - DATA_PATH=${PWD}/data
+    labels:
+      ofelia.job-local.bird-facts.schedule: "0 0 6 * * *"
+      ofelia.job-local.bird-facts.command: "sh -c 'docker run --rm --env BLUESKY_USERNAME --env BLUESKY_PASSWORD --env FLICKR_API_KEY -v $${DATA_PATH}:/app/data bird-facts-bot:latest'"
+    restart: unless-stopped
